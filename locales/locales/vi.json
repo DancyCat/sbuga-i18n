@@ -7,5 +7,13 @@
     "not_found": "Không tìm thấy.",
     "show_spoiler_charts": "Hiển thị Chart Spoiler",
     "invalid_page_singular": "Trang {page} không tồn tại! Có tổng cộng {max_page} trang.",
-    "items_not_found": "Không tìm thấy bất kỳ {item} nào."
+    "items_not_found": "Không tìm thấy bất kỳ {item} nào.",
+    "other_1v_1d": "1 Vocal Khác, 1 Độ Khó Khác",
+    "other_nv_1d": "{vocals} Vocal Khác, 1 Độ Khó Khác",
+    "other_1v_nd": "1 Vocal Khác, {difficulties} Độ Khó Khác",
+    "other_nv_nd": "{vocals} Vocal Khác, {difficulties} Độ Khó Khác",
+    "other_1v": "1 Vocal Khác",
+    "other_nv": "{vocals} Vocal Khác",
+    "other_1d": "1 Độ Khó Khác",
+    "other_nd": "{difficulties} Độ Khó Khác"
 }

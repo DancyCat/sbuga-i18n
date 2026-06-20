@@ -1,7 +1,5 @@
 from helpers.models.api.music import (
     Music,
-    MusicVocal,
-    get_vocal_artist,
     translate_caption,
 )
 from helpers.models.sonolus.item import PlaylistItem, LevelItem

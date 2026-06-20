@@ -7,5 +7,13 @@
     "not_found": "Tidak ditemukan.",
     "show_spoiler_charts": "Tampilkan Chart Spoiler",
     "invalid_page_singular": "Halaman {page} tidak ada! Batasnya adalah {max_page} halaman.",
-    "items_not_found": "Tidak dapat menemukan {item}."
+    "items_not_found": "Tidak dapat menemukan {item}.",
+    "other_1v_1d": "1 Vokal Lain, 1 Tingkat Kesulitan Lain",
+    "other_nv_1d": "{vocals} Vokal Lain, 1 Tingkat Kesulitan Lain",
+    "other_1v_nd": "1 Vokal Lain, {difficulties} Tingkat Kesulitan Lain",
+    "other_nv_nd": "{vocals} Vokal Lain, {difficulties} Tingkat Kesulitan Lain",
+    "other_1v": "1 Vokal Lain",
+    "other_nv": "{vocals} Vokal Lain",
+    "other_1d": "1 Tingkat Kesulitan Lain",
+    "other_nd": "{difficulties} Tingkat Kesulitan Lain"
 }

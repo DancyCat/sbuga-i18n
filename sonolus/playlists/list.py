@@ -7,8 +7,8 @@ from helpers.data_compilers import compile_engines_list
 from helpers.level_builder import (
     fetch_music_data,
     get_merged_musics,
-    get_display_title,
 )
+from helpers.search import fuzzy_search_playlists
 from helpers.playlist_builder import build_playlist_item
 from helpers.models.sonolus.response import ServerItemList
 
@@ -37,26 +37,15 @@ async def main(
 
     engine = engines[0]
 
-    keywords_lower = keywords.lower().strip()
-    if keywords_lower:
-        filtered = []
-        for music in musics:
-            title = get_display_title(music.id, music_data, localization).lower()
-            artist_name = music.artist.name.lower() if music.artist else ""
-            if (
-                keywords_lower in title
-                or keywords_lower in artist_name
-                or keywords_lower in music.title.lower()
-                or (
-                    music.pronunciation
-                    and keywords_lower in music.pronunciation.lower()
-                )
-            ):
-                filtered.append(music)
-        musics = filtered
+    music_map = {m.id: m for m in musics}
+
+    if keywords.strip():
+        matched_ids = fuzzy_search_playlists(keywords)
+        musics = [music_map[mid] for mid in matched_ids if mid in music_map]
+    else:
+        musics.sort(key=lambda m: m.published_at, reverse=True)
 
     musics = [m for m in musics if m.vocals and m.difficulties]
-    musics.sort(key=lambda m: m.published_at, reverse=True)
 
     total = len(musics)
     page_count = max(1, math.ceil(total / items_per_page))
@@ -69,7 +58,6 @@ async def main(
         playlist = await build_playlist_item(
             music=music,
             engine=engine,
-            api=api,
             source=source,
             localization=localization,
             music_data=music_data,

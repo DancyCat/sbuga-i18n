@@ -7,5 +7,13 @@
     "not_found": "Hindi nahanap.",
     "show_spoiler_charts": "Ipakita ang Spoiler Charts",
     "invalid_page_singular": "Ang page {page} ay wala! Mayroong {max_page} na pahina.",
-    "items_not_found": "Hindi mahanap ang anumang {item}."
+    "items_not_found": "Hindi mahanap ang anumang {item}.",
+    "other_1v_1d": "1 Ibang Vocal, 1 Ibang Difficulty",
+    "other_nv_1d": "{vocals} Ibang Vocals, 1 Ibang Difficulty",
+    "other_1v_nd": "1 Ibang Vocal, {difficulties} Ibang Difficulties",
+    "other_nv_nd": "{vocals} Ibang Vocals, {difficulties} Ibang Difficulties",
+    "other_1v": "1 Ibang Vocal",
+    "other_nv": "{vocals} Ibang Vocals",
+    "other_1d": "1 Ibang Difficulty",
+    "other_nd": "{difficulties} Ibang Difficulties"
 }

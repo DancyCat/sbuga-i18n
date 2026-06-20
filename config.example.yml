@@ -13,6 +13,7 @@ sonolus:
 
 api:
   url: "https://api.sbuga.com"
+  region-priority: ["jp", "en", "cn", "kr", "tw"]
 
 redis:
   host: "127.0.0.1"

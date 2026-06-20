@@ -7,5 +7,13 @@
     "not_found": "找不到。",
     "show_spoiler_charts": "顯示劇透譜面",
     "invalid_page_singular": "第 {page} 頁不存在！共有 {max_page} 頁。",
-    "items_not_found": "找不到任何 {item}。"
+    "items_not_found": "找不到任何 {item}。",
+    "other_1v_1d": "1個其他聲線、1個其他難度",
+    "other_nv_1d": "{vocals}個其他聲線、1個其他難度",
+    "other_1v_nd": "1個其他聲線、{difficulties}個其他難度",
+    "other_nv_nd": "{vocals}個其他聲線、{difficulties}個其他難度",
+    "other_1v": "1個其他聲線",
+    "other_nv": "{vocals}個其他聲線",
+    "other_1d": "1個其他難度",
+    "other_nd": "{difficulties}個其他難度"
 }

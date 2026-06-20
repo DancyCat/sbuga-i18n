@@ -7,5 +7,13 @@
     "not_found": "Не найдено.",
     "show_spoiler_charts": "Показать спойлерные чарты",
     "invalid_page_singular": "Страница {page} не существует! Всего есть {max_page} страница.",
-    "items_not_found": "Не удалось найти любой {item}."
+    "items_not_found": "Не удалось найти любой {item}.",
+    "other_1v_1d": "1 другой вокал, 1 другая сложность",
+    "other_nv_1d": "{vocals} других вокалов, 1 другая сложность",
+    "other_1v_nd": "1 другой вокал, {difficulties} других сложностей",
+    "other_nv_nd": "{vocals} других вокалов, {difficulties} других сложностей",
+    "other_1v": "1 другой вокал",
+    "other_nv": "{vocals} других вокалов",
+    "other_1d": "1 другая сложность",
+    "other_nd": "{difficulties} других сложностей"
 }

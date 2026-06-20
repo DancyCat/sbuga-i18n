@@ -48,6 +48,20 @@ class Loc:
     def items_not_found(self, item: str) -> str:
         return self._get("items_not_found").format(item=item)
 
+    def other_section_title(self, vocals: int, difficulties: int) -> str:
+        if vocals and difficulties:
+            v = "1v" if vocals == 1 else "nv"
+            d = "1d" if difficulties == 1 else "nd"
+            return self._get(f"other_{v}_{d}").format(
+                vocals=vocals, difficulties=difficulties
+            )
+        elif vocals:
+            key = "other_1v" if vocals == 1 else "other_nv"
+            return self._get(key).format(vocals=vocals)
+        else:
+            key = "other_1d" if difficulties == 1 else "other_nd"
+            return self._get(key).format(difficulties=difficulties)
+
 
 class LocaleManager:
     def __init__(self, default_locale: str):

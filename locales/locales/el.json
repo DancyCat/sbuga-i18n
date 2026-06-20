@@ -7,5 +7,13 @@
     "not_found": "Δεν βρέθηκε.",
     "show_spoiler_charts": "Εμφάνιση Charts Spoiler",
     "invalid_page_singular": "Σελίδα {page} δεν υπάρχει! Υπάρχουν {max_page} σελίδες.",
-    "items_not_found": "Δέν βρέθηκε κανένα {item}."
+    "items_not_found": "Δέν βρέθηκε κανένα {item}.",
+    "other_1v_1d": "1 Άλλο Vocal, 1 Άλλη Δυσκολία",
+    "other_nv_1d": "{vocals} Άλλα Vocals, 1 Άλλη Δυσκολία",
+    "other_1v_nd": "1 Άλλο Vocal, {difficulties} Άλλες Δυσκολίες",
+    "other_nv_nd": "{vocals} Άλλα Vocals, {difficulties} Άλλες Δυσκολίες",
+    "other_1v": "1 Άλλο Vocal",
+    "other_nv": "{vocals} Άλλα Vocals",
+    "other_1d": "1 Άλλη Δυσκολία",
+    "other_nd": "{difficulties} Άλλες Δυσκολίες"
 }

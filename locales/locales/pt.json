@@ -7,5 +7,13 @@
     "not_found": "Não encontrado.",
     "show_spoiler_charts": "Mostrar Charts Spoiler",
     "invalid_page_singular": "Página {page} não existe! Há {max_page} página.",
-    "items_not_found": "Não foi possível encontrar nenhum {item}."
+    "items_not_found": "Não foi possível encontrar nenhum {item}.",
+    "other_1v_1d": "1 Outro Vocal, 1 Outra Dificuldade",
+    "other_nv_1d": "{vocals} Outros Vocais, 1 Outra Dificuldade",
+    "other_1v_nd": "1 Outro Vocal, {difficulties} Outras Dificuldades",
+    "other_nv_nd": "{vocals} Outros Vocais, {difficulties} Outras Dificuldades",
+    "other_1v": "1 Outro Vocal",
+    "other_nv": "{vocals} Outros Vocais",
+    "other_1d": "1 Outra Dificuldade",
+    "other_nd": "{difficulties} Outras Dificuldades"
 }

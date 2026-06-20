@@ -1,11 +1,11 @@
 import hashlib
-from typing import Union, IO
+from typing import Union
 from io import BytesIO
 from pathlib import Path
 import os
 
 
-def calculate_sha1(data: Union[os.PathLike, IO[bytes], bytes]) -> str:
+def calculate_sha1(data: Union[os.PathLike, BytesIO, bytes]) -> str:
     sha1_hash = hashlib.sha1()
 
     if isinstance(data, (str, Path)):

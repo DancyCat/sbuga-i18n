@@ -39,7 +39,6 @@ async def main(request: SonolusRequest):
         playlist = await build_playlist_item(
             music=music,
             engine=engine,
-            api=api,
             source=source,
             localization=localization,
             music_data=music_data,
@@ -54,7 +53,6 @@ async def main(request: SonolusRequest):
         playlist = await build_playlist_item(
             music=music,
             engine=engine,
-            api=api,
             source=source,
             localization=localization,
             music_data=music_data,

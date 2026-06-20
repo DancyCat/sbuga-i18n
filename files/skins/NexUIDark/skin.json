@@ -6,5 +6,6 @@
     "engines": [
         "Next RUSH"
     ],
-    "locale": null
+    "locale": null,
+    "order": 100
 }

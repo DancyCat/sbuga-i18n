@@ -7,5 +7,13 @@
     "not_found": "Not found.",
     "unknown_error": "Unknown error!",
     "show_spoiler_charts": "Show Spoiler Charts",
-    "show_spoiler_charts_desc": "Show charts that haven't been published yet (future publish date)."
+    "show_spoiler_charts_desc": "Show charts that haven't been published yet (future publish date).",
+    "other_1v_1d": "1 Other Vocal, 1 Other Difficulty",
+    "other_nv_1d": "{vocals} Other Vocals, 1 Other Difficulty",
+    "other_1v_nd": "1 Other Vocal, {difficulties} Other Difficulties",
+    "other_nv_nd": "{vocals} Other Vocals, {difficulties} Other Difficulties",
+    "other_1v": "1 Other Vocal",
+    "other_nv": "{vocals} Other Vocals",
+    "other_1d": "1 Other Difficulty",
+    "other_nd": "{difficulties} Other Difficulties"
 }

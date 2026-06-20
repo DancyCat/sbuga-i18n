@@ -7,5 +7,13 @@
     "not_found": "存在しません。",
     "show_spoiler_charts": "ネタバレ譜面を表示",
     "invalid_page_singular": "ページ{page}が存在しません。 {max_page}ページまであります。",
-    "items_not_found": "{item}はありません。"
+    "items_not_found": "{item}はありません。",
+    "other_1v_1d": "他のボーカル1つ、他の難易度1つ",
+    "other_nv_1d": "他のボーカル{vocals}つ、他の難易度1つ",
+    "other_1v_nd": "他のボーカル1つ、他の難易度{difficulties}つ",
+    "other_nv_nd": "他のボーカル{vocals}つ、他の難易度{difficulties}つ",
+    "other_1v": "他のボーカル1つ",
+    "other_nv": "他のボーカル{vocals}つ",
+    "other_1d": "他の難易度1つ",
+    "other_nd": "他の難易度{difficulties}つ"
 }

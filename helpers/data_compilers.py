@@ -75,9 +75,12 @@ def compile_effects_list(source: str = None) -> list[EffectItem]:
     return compiled_data_list
 
 
-def compile_backgrounds_list(source: str = None) -> list[BackgroundItem]:
-    if cached.get("backgrounds"):
-        return cached["backgrounds"]
+def compile_backgrounds_list(
+    source: str = None, include_hidden: bool = False
+) -> list[BackgroundItem]:
+    cache_key = "backgrounds_all" if include_hidden else "backgrounds"
+    if cached.get(cache_key):
+        return cached[cache_key]
     compiled_data_list = []
     for background in os.listdir("files/backgrounds"):
         if not os.path.isdir(os.path.join("files", "backgrounds", background)):
@@ -88,6 +91,8 @@ def compile_backgrounds_list(source: str = None) -> list[BackgroundItem]:
         ) as f:
             background_data: dict = json.load(f)
         if not background_data.get("enabled", True):
+            continue
+        if not include_hidden and background_data.get("hidden", False):
             continue
 
         compiled_data = BackgroundItem(
@@ -110,14 +115,14 @@ def compile_backgrounds_list(source: str = None) -> list[BackgroundItem]:
             ),
         )
         compiled_data_list.append(compiled_data)
-    cached["backgrounds"] = compiled_data_list
+    cached[cache_key] = compiled_data_list
     return compiled_data_list
 
 
 def compile_particles_list(source: str = None) -> list[ParticleItem]:
     if cached["particles"]:
         return cached["particles"]
-    compiled_data_list = []
+    compiled_data_list: list[tuple[int, ParticleItem]] = []
     for particle in os.listdir("files/particles"):
         if not os.path.isdir(os.path.join("files", "particles", particle)):
             continue
@@ -143,14 +148,17 @@ def compile_particles_list(source: str = None) -> list[ParticleItem]:
             data=repo.get_srl(repo.add_file(f"files/particles/{particle}/data")),
             texture=repo.get_srl(repo.add_file(f"files/particles/{particle}/texture")),
         )
-        compiled_data_list.append(compiled_data)
-    cached["particles"] = compiled_data_list
-    return compiled_data_list
+        compiled_data_list.append((particle_data.get("order", 0), compiled_data))
+    compiled_data_list.sort(key=lambda d: (d[0], d[1].title))
+    result = [item for _, item in compiled_data_list]
+    cached["particles"] = result
+    return result
 
 
 class ExtendedSkinItem(SkinItem):
     locale: str | None = None
     engines: list[str] = []
+    order: int = 0
 
     def to_skin_item(self) -> SkinItem:
         return SkinItem.model_validate(self.model_dump())
@@ -189,9 +197,10 @@ def compile_skins_list(source: str = None) -> list[ExtendedSkinItem]:
             texture=repo.get_srl(repo.add_file(f"files/skins/{skin}/texture")),
             locale=skin_data.get("locale"),
             engines=skin_data.get("engines", []),
+            order=skin_data.get("order", 0),
         )
         compiled_data_list.append(compiled_data)
-    compiled_data_list = sorted(compiled_data_list, key=lambda d: d.title)
+    compiled_data_list = sorted(compiled_data_list, key=lambda d: (d.order, d.title))
     cached["skins"] = compiled_data_list
     return compiled_data_list
 
@@ -238,10 +247,10 @@ def compile_engines_list(
                     for opt_key, value in config_overrides[name].items():
                         option[opt_key] = value
 
-                bytes_io = BytesIO()
-                with gzip.GzipFile(fileobj=bytes_io, mode="wb") as gzipped_file:
-                    json_data = json.dumps(data, ensure_ascii=False).encode("utf-8")
-                    gzipped_file.write(json_data)
+            bytes_io = BytesIO()
+            with gzip.GzipFile(fileobj=bytes_io, mode="wb") as gzipped_file:
+                json_data = json.dumps(data, ensure_ascii=False).encode("utf-8")
+                gzipped_file.write(json_data)
 
             config_hash = repo.add_bytes(bytes_io.getvalue())
         else:
@@ -279,7 +288,7 @@ def compile_engines_list(
             )
         except StopIteration:
             raise KeyError(
-                "StopIteration raised: incorrect key name! Make sure your engine file names and resource file names match."
+                "incorrect key name, make sure engine file names and resource file names match"
             )
 
         compiled_data = ExtendedEngineItem(

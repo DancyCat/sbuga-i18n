@@ -27,10 +27,11 @@ CREATE TABLE IF NOT EXISTS chart_data (
 
 _music_cache: dict[str, list[dict]] = {}
 _search_map_data: dict = {}
-_chart_info: dict[int, dict[str, dict]] = (
+_chart_info: dict[int, dict[str, dict]] = {}
+_bundle_hashes: dict[str, dict[str, str]] = (
     {}
-)  # {music_id: {difficulty: {combo, duration}}}
-_versions: dict = {}  # {"en": {"data_version", "assetinfo_hash"}, "jp": {...}}
+)  # {music_id_str: {jacket, score, long/{abn}, short/{abn}}}
+_versions: dict = {}
 _CHECK_INTERVAL = 300
 _lock = asyncio.Lock()
 
@@ -62,6 +63,8 @@ def _load_from_disk():
     if load_search_from_disk():
         from helpers.search import (
             _search_map,
+            _vocal_id_map,
+            _playlist_map,
             _all_artists,
             _all_captions,
             _min_level,
@@ -70,6 +73,10 @@ def _load_from_disk():
 
         _search_map_data = {
             "search_map": {k: [list(lk) for lk in v] for k, v in _search_map.items()},
+            "vocal_id_map": {
+                k: [list(lk) for lk in v] for k, v in _vocal_id_map.items()
+            },
+            "playlist_map": {k: list(v) for k, v in _playlist_map.items()},
             "all_artists": _all_artists,
             "all_captions": _all_captions,
             "min_level": _min_level,
@@ -145,24 +152,7 @@ async def _load_chart_info_from_db():
     print(f"[DataWorker] loaded {total} chart infos from db")
 
 
-async def _upload_to_s3(
-    key: str, data: bytes, content_type: str = "application/octet-stream"
-):
-    session = aioboto3.Session(
-        aws_access_key_id=_s3_config["access-key-id"],
-        aws_secret_access_key=_s3_config["secret-access-key"],
-        region_name=_s3_config["location"],
-    )
-    async with session.resource("s3", endpoint_url=_s3_config["endpoint"]) as s3:
-        bucket = await s3.Bucket(_s3_config["bucket-name"])
-        await bucket.upload_fileobj(
-            Fileobj=io.BytesIO(data),
-            Key=key,
-            ExtraArgs={"ContentType": content_type},
-        )
-
-
-# ---- MUSIC DATA + SEARCH MAPS (triggered by data version change) ----
+# ---- music data + search maps ----
 
 
 async def _check_and_update_music():
@@ -171,7 +161,6 @@ async def _check_and_update_music():
     from helpers.config_loader import get_config
 
     all_regions = get_config()["api"]["region-priority"]
-    # only request regions sbuga-backend supports
     supported = {"en", "jp"}
     regions = [r for r in all_regions if r in supported]
     async with aiohttp.ClientSession() as session:
@@ -202,7 +191,7 @@ async def _check_and_update_music():
             *[
                 _fetch_json(
                     session,
-                    f"{_api_url}/api/pjsk_data/musics?region={r}&ignore_leak=true",
+                    f"{_api_url}/api/pjsk_data/musics?region={r}&ignore_leak=true&image_type=png",
                 )
                 for r in regions
             ]
@@ -233,6 +222,8 @@ async def _check_and_update_music():
 
     from helpers.search import (
         _search_map,
+        _vocal_id_map,
+        _playlist_map,
         _all_artists,
         _all_captions,
         _min_level,
@@ -241,6 +232,8 @@ async def _check_and_update_music():
 
     new_search_data = {
         "search_map": {k: [list(lk) for lk in v] for k, v in _search_map.items()},
+        "vocal_id_map": {k: [list(lk) for lk in v] for k, v in _vocal_id_map.items()},
+        "playlist_map": {k: list(v) for k, v in _playlist_map.items()},
         "all_artists": _all_artists,
         "all_captions": _all_captions,
         "min_level": _min_level,
@@ -259,7 +252,7 @@ async def _check_and_update_music():
     await _check_and_update_charts()
 
 
-# ---- CHARTS + LEVELDATA (triggered by assetinfo bundle hash change) ----
+# ---- charts + leveldata ----
 
 
 async def _check_and_update_charts():
@@ -277,46 +270,70 @@ async def _check_and_update_charts():
     regions = [r for r in all_regions if r in supported]
     merged = _get_merged_multi(_music_cache, regions)
 
-    # known music ids from music data
     known_music_ids = {m.id for m in merged}
 
-    # fetch assetinfo from both regions
+    # fetch all music bundles (jacket, long, short, score)
     async with aiohttp.ClientSession() as session:
         jp_assetinfo, en_assetinfo = await asyncio.gather(
             _fetch_json(
-                session,
-                f"{_api_url}/api/pjsk_data/assetinfo?region=jp&filter=music/music_score",
+                session, f"{_api_url}/api/pjsk_data/assetinfo?region=jp&filter=music/"
             ),
             _fetch_json(
-                session,
-                f"{_api_url}/api/pjsk_data/assetinfo?region=en&filter=music/music_score",
+                session, f"{_api_url}/api/pjsk_data/assetinfo?region=en&filter=music/"
             ),
         )
     if not jp_assetinfo and not en_assetinfo:
         print("[DataWorker] failed to fetch assetinfo, skipping charts")
         return
 
-    # merge bundles, jp takes priority — only for music ids we know about
-    remote_bundles: dict[str, dict] = {}
+    all_bundles: dict[str, dict] = {}
     if en_assetinfo:
-        remote_bundles.update(en_assetinfo["bundles"])
+        all_bundles.update(en_assetinfo["bundles"])
     if jp_assetinfo:
-        remote_bundles.update(jp_assetinfo["bundles"])
+        all_bundles.update(jp_assetinfo["bundles"])
 
-    # parse bundle names to music ids, filter to known
-    bundle_hash_map: dict[int, str] = {}
-    for bundle_name, info in remote_bundles.items():
+    # parse bundle names into per-music per-type hashes
+    # music/jacket/jacket_s_001 -> music_id=1, type=jacket
+    # music/long/0001_01 -> music_id=1, type=long
+    # music/short/0001_01 -> music_id=1, type=short
+    # music/music_score/0001_01 -> music_id=1, type=score
+    TYPE_MAP = {
+        "jacket": "jacket",
+        "long": "long",
+        "short": "short",
+        "music_score": "score",
+    }
+    new_bundle_hashes: dict[str, dict[str, str]] = {}
+    bundle_hash_map: dict[int, str] = {}  # score bundle hash for chart processing
+
+    for bundle_name, info in all_bundles.items():
         parts = bundle_name.split("/")
         if len(parts) < 3:
+            continue
+        bundle_type = TYPE_MAP.get(parts[1])
+        if not bundle_type:
             continue
         try:
             music_id = int(parts[2].split("_")[0])
         except (ValueError, IndexError):
             continue
-        if music_id in known_music_ids:
+        if music_id not in known_music_ids:
+            continue
+
+        mid_str = str(music_id)
+        if mid_str not in new_bundle_hashes:
+            new_bundle_hashes[mid_str] = {}
+        if bundle_type in ("long", "short"):
+            new_bundle_hashes[mid_str][f"{bundle_type}/{parts[2]}"] = info["hash"]
+        else:
+            new_bundle_hashes[mid_str][bundle_type] = info["hash"]
+
+        if bundle_type == "score":
             bundle_hash_map[music_id] = info["hash"]
 
-    # hash ONLY bundles we care about (known music ids)
+    _bundle_hashes.clear()
+    _bundle_hashes.update(new_bundle_hashes)
+
     import hashlib
 
     def _hash_known(bundles: dict[int, str]) -> str:
@@ -334,33 +351,17 @@ async def _check_and_update_charts():
         db_bundle_hashes[r["music_id"]] = r["bundle_hash"]
         existing_set.add((r["music_id"], r["difficulty"]))
 
-    # find music ids that need processing
     changed_music_ids: set[int] = set()
     for music_id, remote_hash in bundle_hash_map.items():
         if db_bundle_hashes.get(music_id) != remote_hash:
             changed_music_ids.add(music_id)
 
     if not changed_music_ids:
-        # no actual changes for known music — update version hashes
-        new_en_hash = _hash_known(
-            {
-                mid: h
-                for mid, h in bundle_hash_map.items()
-                if mid in {m["id"] for m in en_musics}
-            }
-        )
-        new_jp_hash = _hash_known(
-            {
-                mid: h
-                for mid, h in bundle_hash_map.items()
-                if mid in {m["id"] for m in jp_musics}
-            }
-        )
-        _versions.setdefault("en", {})["assetinfo_hash"] = new_en_hash
-        _versions.setdefault("jp", {})["assetinfo_hash"] = new_jp_hash
+        combined_hash = _hash_known(bundle_hash_map)
+        for r in regions:
+            _versions.setdefault(r, {})["assetinfo_hash"] = combined_hash
         return
 
-    # map music_id -> {difficulty: chart_url}
     to_process: dict[int, dict[str, str]] = {}
     for music in merged:
         if music.id in changed_music_ids:
@@ -368,10 +369,7 @@ async def _check_and_update_charts():
                 d.difficulty: d.chart_url for d in music.difficulties
             }
 
-    # flatten to individual chart tasks
-    all_tasks: list[tuple[int, str, str, str]] = (
-        []
-    )  # (music_id, difficulty, chart_url, bundle_hash)
+    all_tasks: list[tuple[int, str, str, str]] = []
     for music_id, diff_urls in to_process.items():
         bh = bundle_hash_map.get(music_id, "")
         for difficulty, url in diff_urls.items():
@@ -473,28 +471,14 @@ async def _check_and_update_charts():
 
     thread_pool.shutdown(wait=False)
 
-    # update version hashes per region
-    new_en_hash = _hash_known(
-        {
-            mid: h
-            for mid, h in bundle_hash_map.items()
-            if mid in {m["id"] for m in en_musics}
-        }
-    )
-    new_jp_hash = _hash_known(
-        {
-            mid: h
-            for mid, h in bundle_hash_map.items()
-            if mid in {m["id"] for m in jp_musics}
-        }
-    )
-    _versions.setdefault("en", {})["assetinfo_hash"] = new_en_hash
-    _versions.setdefault("jp", {})["assetinfo_hash"] = new_jp_hash
+    combined_hash = _hash_known(bundle_hash_map)
+    for r in regions:
+        _versions.setdefault(r, {})["assetinfo_hash"] = combined_hash
     total = sum(len(d) for d in _chart_info.values())
     print(f"[DataWorker] charts done. {total} total")
 
 
-# ---- MAIN UPDATE LOOP ----
+# ---- main update loop ----
 
 
 async def _update():
@@ -565,6 +549,11 @@ async def get_search_maps():
 @app.get("/chart_info")
 async def get_chart_info_endpoint():
     return _chart_info
+
+
+@app.get("/bundle_hashes")
+async def get_bundle_hashes():
+    return _bundle_hashes
 
 
 @app.get("/versions")

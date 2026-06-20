@@ -6,8 +6,11 @@ import aiohttp
 from helpers.api import SbugaAPI
 from helpers.config_loader import get_config as _get_config
 from helpers.models.api.music import (
+    GameCharacterData,
     Music,
+    MusicArtist,
     MusicVocal,
+    OutsideCharacterData,
     get_vocal_artist,
     translate_caption,
 )
@@ -17,6 +20,7 @@ from helpers.models.sonolus.item import LevelItem, UseItem, BackgroundItem
 from helpers.models.sonolus.misc import SRL, Tag
 
 _chart_info_cache: dict[int, dict[str, dict]] = {}
+_bundle_hashes: dict[str, dict[str, str]] = {}
 _music_data: dict[str, list[Music]] = {}
 _last_version_check: float = 0
 _known_version: str = ""
@@ -48,12 +52,73 @@ async def _get_session() -> aiohttp.ClientSession:
     return _session
 
 
-async def fetch_music_data(api: SbugaAPI) -> dict[str, list[Music]]:
-    global _music_data, _last_version_check, _known_version
-    now = time.time()
+import asyncio
 
-    if _music_data and now - _last_version_check < _VERSION_CHECK_INTERVAL:
-        return _music_data
+_update_lock = asyncio.Lock()
+_updating = False
+
+
+async def _do_update():
+    global _music_data, _known_version, _updating
+    _updating = True
+    try:
+        session = await _get_session()
+        async with session.get(f"{DATA_WORKER_URL}/musics") as resp:
+            if resp.status != 200:
+                return
+            raw = await resp.json()
+
+        async with session.get(f"{DATA_WORKER_URL}/search_maps") as resp:
+            if resp.status != 200:
+                return
+            search_data = await resp.json()
+
+        async with session.get(f"{DATA_WORKER_URL}/chart_info") as resp:
+            if resp.status != 200:
+                return
+            new_chart_info = await resp.json()
+
+        async with session.get(f"{DATA_WORKER_URL}/bundle_hashes") as resp:
+            if resp.status != 200:
+                return
+            new_bundle_hashes = await resp.json()
+
+        new_music_data = {
+            "en": [Music.model_validate(m) for m in raw["en"]],
+            "jp": [Music.model_validate(m) for m in raw["jp"]],
+        }
+
+        if search_data:
+            load_from_response(search_data)
+
+        _chart_info_cache.clear()
+        for mid_str, diffs in new_chart_info.items():
+            _chart_info_cache[int(mid_str)] = diffs
+
+        _bundle_hashes.clear()
+        _bundle_hashes.update(new_bundle_hashes)
+
+        _music_data = new_music_data
+
+        session = await _get_session()
+        async with session.get(f"{DATA_WORKER_URL}/versions") as resp:
+            if resp.status == 200:
+                new_versions = await resp.json()
+                _known_version = json.dumps(new_versions, sort_keys=True)
+
+        print("[SSS Worker] data updated")
+    except Exception as e:
+        print(f"[SSS Worker] update failed: {e}")
+    finally:
+        _updating = False
+
+
+async def fetch_music_data(api: SbugaAPI) -> dict[str, list[Music]]:
+    global _last_version_check
+
+    now = time.time()
+    if now - _last_version_check < _VERSION_CHECK_INTERVAL:
+        return _music_data or {"en": [], "jp": []}
 
     _last_version_check = now
 
@@ -66,48 +131,18 @@ async def fetch_music_data(api: SbugaAPI) -> dict[str, list[Music]]:
     except Exception:
         return _music_data or {"en": [], "jp": []}
 
-    # versions is a dict now, serialize for comparison
     new_version_str = json.dumps(new_versions, sort_keys=True)
-    if _music_data and new_version_str == _known_version:
-        return _music_data
-
-    try:
-        session = await _get_session()
-        async with session.get(f"{DATA_WORKER_URL}/musics") as resp:
-            if resp.status != 200:
-                return _music_data or {"en": [], "jp": []}
-            raw = await resp.json()
-
-        async with session.get(f"{DATA_WORKER_URL}/search_maps") as resp:
-            if resp.status != 200:
-                return _music_data or {"en": [], "jp": []}
-            search_data = await resp.json()
-
-        async with session.get(f"{DATA_WORKER_URL}/chart_info") as resp:
-            if resp.status != 200:
-                return _music_data or {"en": [], "jp": []}
-            new_chart_info = await resp.json()
-    except Exception:
+    if new_version_str == _known_version:
         return _music_data or {"en": [], "jp": []}
 
-    _music_data = {
-        "en": [Music.model_validate(m) for m in raw["en"]],
-        "jp": [Music.model_validate(m) for m in raw["jp"]],
-    }
+    if not _music_data:
+        async with _update_lock:
+            if not _music_data:
+                await _do_update()
+    elif not _updating:
+        asyncio.create_task(_do_update())
 
-    if search_data:
-        load_from_response(search_data)
-
-    # chart_info is now {music_id: {difficulty: {combo, duration}}}
-    # keys come as strings from json, convert to int
-    _chart_info_cache.clear()
-    for mid_str, diffs in new_chart_info.items():
-        _chart_info_cache[int(mid_str)] = diffs
-
-    _known_version = new_version_str
-
-    print(f"[SSS Worker] data updated")
-    return _music_data
+    return _music_data or {"en": [], "jp": []}
 
 
 def get_merged_musics(
@@ -117,6 +152,18 @@ def get_merged_musics(
 ) -> list[Music]:
     en_map = {m.id: m for m in music_data.get("en", [])}
     jp_map = {m.id: m for m in music_data.get("jp", [])}
+
+    all_game_chars: dict[int, GameCharacterData] = {}
+    all_outside_chars: dict[int, OutsideCharacterData] = {}
+    all_artists: dict[int, MusicArtist] = {}
+    if localization != "ja":
+        for m in music_data.get("en", []):
+            for cid, cdata in m.game_characters.items():
+                all_game_chars[cid] = cdata
+            for cid, cdata in m.outside_characters.items():
+                all_outside_chars[cid] = cdata
+            if m.artist:
+                all_artists[m.artist.id] = m.artist
 
     all_ids = set(en_map.keys()) | set(jp_map.keys())
     merged: list[Music] = []
@@ -138,12 +185,27 @@ def get_merged_musics(
             if not music.vocals:
                 continue
 
-        # use en character names for non-jp locales
-        if localization != "ja" and mid in en_map:
-            en_music = en_map[mid]
+        if localization != "ja":
             music = music.model_copy()
-            music.game_characters = en_music.game_characters
-            music.outside_characters = en_music.outside_characters
+            if mid in en_map:
+                en_music = en_map[mid]
+                music.game_characters = en_music.game_characters
+                music.outside_characters = en_music.outside_characters
+                if en_music.artist:
+                    music.artist = en_music.artist
+            else:
+                music.game_characters = {
+                    cid: all_game_chars[cid]
+                    for cid in music.game_characters
+                    if cid in all_game_chars
+                }
+                music.outside_characters = {
+                    cid: all_outside_chars[cid]
+                    for cid in music.outside_characters
+                    if cid in all_outside_chars
+                }
+                if music.artist and music.artist.id in all_artists:
+                    music.artist = all_artists[music.artist.id]
 
         merged.append(music)
 
@@ -175,6 +237,31 @@ def get_display_title(
         return f"Music {music_id}"
 
 
+def get_display_artist(
+    music_id: int,
+    music_data: dict[str, list[Music]],
+    localization: str,
+) -> str | None:
+    en_map = {m.id: m for m in music_data.get("en", [])}
+    jp_map = {m.id: m for m in music_data.get("jp", [])}
+
+    en_music = en_map.get(music_id)
+    jp_music = jp_map.get(music_id)
+
+    if localization == "ja":
+        if jp_music and jp_music.artist:
+            return jp_music.artist.name
+        if en_music and en_music.artist:
+            return en_music.artist.name
+        return None
+    else:
+        if en_music and en_music.artist:
+            return en_music.artist.name
+        if jp_music and jp_music.artist:
+            return jp_music.artist.name
+        return None
+
+
 def get_chart_info(music_id: int, difficulty: str) -> dict:
     return _chart_info_cache.get(music_id, {}).get(
         difficulty, {"combo": 0, "duration": 0}
@@ -185,6 +272,14 @@ def get_leveldata_url(music_id: int, difficulty: str) -> str:
     config = _get_config()
     s3_base = config["s3"]["base-url"].rstrip("/")
     return f"{s3_base}/leveldata/{music_id}/{difficulty}.gz"
+
+
+def _srl(
+    url: str, music_id: int, asset_suffix: str, bundle_key: str | None = None
+) -> SRL:
+    key = bundle_key or asset_suffix
+    h = _bundle_hashes.get(str(music_id), {}).get(key)
+    return SRL(hash=f"{h}-{asset_suffix}" if h else None, url=url)
 
 
 def invalidate_chart_cache():
@@ -221,12 +316,16 @@ def _get_all_title_variants(
 
 def build_level_description(
     music: Music,
+    vocal: MusicVocal,
     combo: int,
     duration: float,
     music_data: dict[str, list[Music]] | None = None,
 ) -> str:
     lines = []
 
+    artist = get_vocal_artist(vocal, music)
+    if artist:
+        lines.append(f"#ARTISTS:#SEPARATOR_COLON:{artist}")
     if music.lyricist:
         lines.append(f"#LYRICIST:#SEPARATOR_COLON:{music.lyricist}")
     if music.composer:
@@ -294,11 +393,11 @@ def build_level_item(
     else:
         bg_image_url = ""
 
-    backgrounds = compile_backgrounds_list(source)
-    black_bg = next((b for b in backgrounds if b.name == "black"), None)
+    backgrounds = compile_backgrounds_list(source, include_hidden=True)
+    template_bg = next((b for b in backgrounds if b.name == "pjsk_template"), None)
 
     use_bg = UseItem(useDefault=True)
-    if black_bg and bg_image_url:
+    if template_bg and bg_image_url:
         use_bg = UseItem(
             useDefault=False,
             item=BackgroundItem(
@@ -308,15 +407,15 @@ def build_level_item(
                 subtitle=title,
                 author="",
                 tags=[],
-                thumbnail=SRL(url=cover_url),
-                data=black_bg.data,
-                image=SRL(url=bg_image_url),
-                configuration=black_bg.configuration,
+                thumbnail=_srl(cover_url, music.id, "jacket"),
+                data=template_bg.data,
+                image=_srl(bg_image_url, music.id, f"bg{levelbg}", "jacket"),
+                configuration=template_bg.configuration,
             ),
         )
 
-    bgm_url = vocal.bgm_url or ""
-    preview_url = vocal.preview_url or ""
+    bgm_url = vocal.bgm_nosil_url or vocal.bgm_url or ""
+    preview_url = vocal.preview_nosil_url or vocal.preview_url or ""
 
     return LevelItem(
         name=level_id,
@@ -338,10 +437,10 @@ def build_level_item(
         useBackground=use_bg,
         useEffect=UseItem(useDefault=True),
         useParticle=UseItem(useDefault=True),
-        cover=SRL(url=cover_url),
-        bgm=SRL(url=bgm_url),
-        preview=SRL(url=preview_url),
-        data=SRL(url=get_leveldata_url(music.id, difficulty_name)),
+        cover=_srl(cover_url, music.id, "jacket"),
+        bgm=_srl(bgm_url, music.id, "long", f"long/{vocal.assetbundle_name}"),
+        preview=_srl(preview_url, music.id, "short", f"short/{vocal.assetbundle_name}"),
+        data=_srl(get_leveldata_url(music.id, difficulty_name), music.id, "score"),
     )
 
 

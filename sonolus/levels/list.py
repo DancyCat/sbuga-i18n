@@ -1,6 +1,6 @@
 import math
 import random as rand_module
-import time
+
 
 from fastapi import APIRouter
 
@@ -32,22 +32,17 @@ async def main(
     artists: str = "",
     category: str = "",
 ):
-    t0 = time.perf_counter()
 
     api = request.app.api
     source = request.app.base_url
     localization = request.state.localization
     items_per_page = request.app.get_items_per_page("levels")
 
-    t1 = time.perf_counter()
     music_data = await fetch_music_data(api)
-    t2 = time.perf_counter()
     musics = get_merged_musics(
         music_data, request.state.show_spoilers, request.state.localization
     )
-    t3 = time.perf_counter()
     engines = await request.app.run_blocking(compile_engines_list, source, localization)
-    t4 = time.perf_counter()
 
     if not engines:
         return ServerItemList(pageCount=0, items=[])
@@ -57,7 +52,6 @@ async def main(
     music_map = {m.id: m for m in musics}
     vocal_map = {(m.id, v.id): v for m in musics for v in m.vocals}
     diff_map = {(m.id, d.difficulty): d for m in musics for d in m.difficulties}
-    t5 = time.perf_counter()
 
     if keywords.strip():
         matched_keys = fuzzy_search(keywords)
@@ -80,7 +74,6 @@ async def main(
             for v in m.vocals
             for d in m.difficulties
         ]
-    t6 = time.perf_counter()
 
     if difficulty != "all":
         all_keys = [k for k in all_keys if k[2] == difficulty]
@@ -116,7 +109,6 @@ async def main(
                 if (v := vocal_map.get((k[0], k[1])))
                 and v.caption.lower() in included_cats
             ]
-    t7 = time.perf_counter()
 
     if random:
         rand_module.shuffle(all_keys)
@@ -147,7 +139,6 @@ async def main(
         page_count = max(1, math.ceil(total / items_per_page))
         start = page * items_per_page
         all_keys = all_keys[start : start + items_per_page]
-    t8 = time.perf_counter()
 
     items = []
     for mid, vid, dname in all_keys:
@@ -166,19 +157,6 @@ async def main(
             levelbg=request.state.levelbg,
         )
         items.append(level)
-    t9 = time.perf_counter()
 
-    print(
-        f"[TIMING levels/list] "
-        f"fetch={t2-t1:.3f}s "
-        f"merge={t3-t2:.3f}s "
-        f"engines={t4-t3:.3f}s "
-        f"maps={t5-t4:.3f}s "
-        f"search={t6-t5:.3f}s "
-        f"filter={t7-t6:.3f}s "
-        f"sort={t8-t7:.3f}s "
-        f"build={t9-t8:.3f}s "
-        f"TOTAL={t9-t0:.3f}s"
-    )
-
-    return ServerItemList(pageCount=page_count, items=items)
+    result = ServerItemList(pageCount=page_count, items=items)
+    return result

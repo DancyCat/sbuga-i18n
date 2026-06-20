@@ -16,7 +16,6 @@ psql = get_config()["psql"]
 env = {**os.environ, "PGPASSWORD": psql["password"]}
 base = ["-h", psql["host"], "-p", str(psql["port"]), "-U", psql["user"]]
 
-# create db if not exists
 result = subprocess.run(
     [
         "psql",

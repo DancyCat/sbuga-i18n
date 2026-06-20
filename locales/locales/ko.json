@@ -7,5 +7,13 @@
     "not_found": "찾을 수 없습니다.",
     "show_spoiler_charts": "스포일러 채보 표시",
     "invalid_page_singular": "페이지 {page}은(는) 존재하지 않습니다! 페이지는 총{max_page}개가 있습니다.",
-    "items_not_found": "{item}을(를) 찾을 수 없습니다."
+    "items_not_found": "{item}을(를) 찾을 수 없습니다.",
+    "other_1v_1d": "다른 보컬 1개, 다른 난이도 1개",
+    "other_nv_1d": "다른 보컬 {vocals}개, 다른 난이도 1개",
+    "other_1v_nd": "다른 보컬 1개, 다른 난이도 {difficulties}개",
+    "other_nv_nd": "다른 보컬 {vocals}개, 다른 난이도 {difficulties}개",
+    "other_1v": "다른 보컬 1개",
+    "other_nv": "다른 보컬 {vocals}개",
+    "other_1d": "다른 난이도 1개",
+    "other_nd": "다른 난이도 {difficulties}개"
 }

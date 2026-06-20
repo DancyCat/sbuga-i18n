@@ -60,6 +60,8 @@ def _romanize(text: str) -> list[str]:
 LevelKey = tuple[int, int, str]
 
 _search_map: dict[str, set[LevelKey]] = {}
+_vocal_id_map: dict[str, set[LevelKey]] = {}
+_playlist_map: dict[str, set[int]] = {}
 _all_artists: list[str] = []
 _all_captions: list[str] = []
 _min_level: int = 1
@@ -74,12 +76,22 @@ def _add_keys(keys: list[str], level_keys: list[LevelKey]):
             _search_map.setdefault(pk, set()).update(level_keys)
 
 
+def _add_playlist_keys(keys: list[str], music_ids: list[int]):
+    for key in keys:
+        pk = preprocess(key)
+        if pk:
+            _playlist_map.setdefault(pk, set()).update(music_ids)
+
+
 def _save_to_disk():
     os.makedirs("cache", exist_ok=True)
     serializable_map = {k: [list(lk) for lk in v] for k, v in _search_map.items()}
+    serializable_playlist = {k: list(v) for k, v in _playlist_map.items()}
     data = {
         "versions": _cached_versions,
         "search_map": serializable_map,
+        "vocal_id_map": {k: [list(lk) for lk in v] for k, v in _vocal_id_map.items()},
+        "playlist_map": serializable_playlist,
         "all_artists": _all_artists,
         "all_captions": _all_captions,
         "min_level": _min_level,
@@ -90,7 +102,7 @@ def _save_to_disk():
 
 
 def _load_from_disk() -> bool:
-    global _search_map, _all_artists, _all_captions, _min_level, _max_level, _cached_versions
+    global _search_map, _vocal_id_map, _playlist_map, _all_artists, _all_captions, _min_level, _max_level, _cached_versions
     if not os.path.exists(CACHE_FILE):
         return False
     try:
@@ -100,6 +112,10 @@ def _load_from_disk() -> bool:
         _search_map = {
             k: {tuple(lk) for lk in v} for k, v in data.get("search_map", {}).items()
         }
+        _vocal_id_map = {
+            k: {tuple(lk) for lk in v} for k, v in data.get("vocal_id_map", {}).items()
+        }
+        _playlist_map = {k: set(v) for k, v in data.get("playlist_map", {}).items()}
         _all_artists = data.get("all_artists", [])
         _all_captions = data.get("all_captions", [])
         _min_level = data.get("min_level", 1)
@@ -129,6 +145,8 @@ def build_search_maps(
 ):
     global _all_artists, _all_captions, _min_level, _max_level, _cached_versions
     _search_map.clear()
+    _vocal_id_map.clear()
+    _playlist_map.clear()
 
     all_artists_set: set[str] = set()
     all_captions_set: set[str] = set()
@@ -136,6 +154,7 @@ def build_search_maps(
     max_lv = 0
 
     for music in musics:
+        mid_list = [music.id]
         all_level_keys: list[LevelKey] = []
         for vocal in music.vocals:
             for diff in music.difficulties:
@@ -150,21 +169,35 @@ def build_search_maps(
         all_title_keys.append(music.title)
         if music.pronunciation:
             all_title_keys.append(music.pronunciation)
-        _add_keys(list(dict.fromkeys(all_title_keys)), all_level_keys)
+        deduped_titles = list(dict.fromkeys(all_title_keys))
+        _add_keys(deduped_titles, all_level_keys)
+        _add_playlist_keys(deduped_titles, mid_list)
 
         _add_keys([str(music.id)], all_level_keys)
+        _add_playlist_keys([str(music.id)], mid_list)
+
+        if music.artist:
+            artist_keys = [music.artist.name, *_romanize(music.artist.name)]
+            if music.artist.pronunciation:
+                artist_keys.append(music.artist.pronunciation)
+                artist_keys.extend(_romanize(music.artist.pronunciation))
+            _add_keys(artist_keys, all_level_keys)
+            _add_playlist_keys(artist_keys, mid_list)
 
         for field in [music.lyricist, music.composer, music.arranger]:
             if field:
                 field_keys = [field, *_romanize(field)]
                 _add_keys(field_keys, all_level_keys)
+                _add_playlist_keys(field_keys, mid_list)
 
         for vocal in music.vocals:
             vocal_level_keys = [
                 (music.id, vocal.id, diff.difficulty) for diff in music.difficulties
             ]
 
-            _add_keys([str(vocal.id)], vocal_level_keys)
+            vocal_id_str = preprocess(str(vocal.id))
+            _add_keys([vocal_id_str], vocal_level_keys)
+            _vocal_id_map.setdefault(vocal_id_str, set()).update(vocal_level_keys)
 
             all_captions_set.add(vocal.caption)
 
@@ -237,17 +270,56 @@ def fuzzy_search(
             similarity -= excess_penalty + edit_penalty
 
         if similarity >= sensitivity_100:
+            vocal_lks = _vocal_id_map.get(key)
             for lk in level_keys:
-                if lk not in scores or similarity > scores[lk]:
-                    scores[lk] = similarity
+                score = (
+                    similarity * 0.9 if vocal_lks and lk in vocal_lks else similarity
+                )
+                if lk not in scores or score > scores[lk]:
+                    scores[lk] = score
 
     sorted_keys = sorted(scores.keys(), key=lambda lk: scores[lk], reverse=True)
     return sorted_keys[:limit]
 
 
+def fuzzy_search_playlists(
+    query: str, sensitivity: float = 0.65, limit: int = 200
+) -> list[int]:
+    if not _playlist_map or not query.strip():
+        return []
+
+    sensitivity_100 = sensitivity * 100
+    query_pp = preprocess(query)
+
+    scores: dict[int, float] = {}
+
+    for key, music_ids in _playlist_map.items():
+        similarity = fuzz.token_set_ratio(query_pp, key)
+        edit_distance = Levenshtein.distance(query_pp, key)
+
+        if edit_distance > 5:
+            excess = abs(len(key) - len(query_pp))
+            real_edits = max(0, edit_distance - excess)
+            excess_penalty = max(0, excess - 5) * 2
+            edit_penalty = max(0, real_edits - 5) * 5
+            similarity -= excess_penalty + edit_penalty
+
+        if similarity >= sensitivity_100:
+            for mid in music_ids:
+                if mid not in scores or similarity > scores[mid]:
+                    scores[mid] = similarity
+
+    sorted_ids = sorted(scores.keys(), key=lambda mid: scores[mid], reverse=True)
+    return sorted_ids[:limit]
+
+
 def load_from_response(data: dict):
-    global _search_map, _all_artists, _all_captions, _min_level, _max_level
+    global _search_map, _vocal_id_map, _playlist_map, _all_artists, _all_captions, _min_level, _max_level
     _search_map = {k: {tuple(lk) for lk in v} for k, v in data["search_map"].items()}
+    _vocal_id_map = {
+        k: {tuple(lk) for lk in v} for k, v in data.get("vocal_id_map", {}).items()
+    }
+    _playlist_map = {k: set(v) for k, v in data.get("playlist_map", {}).items()}
     _all_artists = data["all_artists"]
     _all_captions = data["all_captions"]
     _min_level = data["min_level"]

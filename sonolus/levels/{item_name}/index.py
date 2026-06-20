@@ -71,7 +71,7 @@ async def main(request: SonolusRequest, item_name: str):
             detail=locale.item_not_found("Level", item_name),
         )
 
-    chart_info = await get_chart_info(api, music.id, difficulty_name)
+    chart_info = get_chart_info(music.id, difficulty_name)
 
     level = build_level_item(
         music=music,
@@ -87,59 +87,56 @@ async def main(request: SonolusRequest, item_name: str):
 
     description = build_level_description(
         music=music,
+        vocal=vocal,
         combo=chart_info["combo"],
         duration=chart_info["duration"],
         music_data=music_data,
-        levelbg=request.state.levelbg,
     )
 
     sections = []
 
+    other_diff_levels = []
     other_diffs = get_other_difficulties(music, difficulty_name)
-    if other_diffs:
-        other_diff_levels = []
-        for diff_name, play_level in other_diffs:
-            od_level = build_level_item(
-                music=music,
-                vocal=vocal,
-                difficulty_name=diff_name,
-                play_level=play_level,
-                engine=engine,
-                source=source,
-                localization=request.state.localization,
-                music_data=music_data,
-                levelbg=request.state.levelbg,
-            )
-            other_diff_levels.append(od_level)
-        sections.append(
-            LevelItemSection(
-                title="#OTHER_DIFFICULTIES",
-                icon="level",
-                items=other_diff_levels,
-            )
+    for diff_name, play_level in other_diffs:
+        od_level = build_level_item(
+            music=music,
+            vocal=vocal,
+            difficulty_name=diff_name,
+            play_level=play_level,
+            engine=engine,
+            source=source,
+            localization=request.state.localization,
+            music_data=music_data,
+            levelbg=request.state.levelbg,
         )
+        other_diff_levels.append(od_level)
 
+    other_ver_levels = []
     other_vocals = get_other_versions(music, vocal_id)
-    if other_vocals:
-        other_ver_levels = []
-        for other_vocal in other_vocals:
-            ov_level = build_level_item(
-                music=music,
-                vocal=other_vocal,
-                difficulty_name=difficulty_name,
-                play_level=diff.play_level,
-                engine=engine,
-                source=source,
-                localization=request.state.localization,
-                music_data=music_data,
-                levelbg=request.state.levelbg,
-            )
-            other_ver_levels.append(ov_level)
+    for other_vocal in other_vocals:
+        ov_level = build_level_item(
+            music=music,
+            vocal=other_vocal,
+            difficulty_name=difficulty_name,
+            play_level=diff.play_level,
+            engine=engine,
+            source=source,
+            localization=request.state.localization,
+            music_data=music_data,
+            levelbg=request.state.levelbg,
+        )
+        other_ver_levels.append(ov_level)
+
+    if other_diff_levels or other_ver_levels:
+        section_title = locale.other_section_title(
+            vocals=len(other_ver_levels),
+            difficulties=len(other_diff_levels),
+        )
         sections.append(
             LevelItemSection(
-                title="#OTHER_VERSIONS",
+                title=section_title,
                 icon="level",
-                items=other_ver_levels,
+                items=other_diff_levels + other_ver_levels,
             )
         )
 
@@ -172,7 +169,7 @@ async def main(request: SonolusRequest, item_name: str):
                 )
             )
 
-    return ServerItemDetails(
+    result = ServerItemDetails(
         item=level,
         description=description,
         actions=[],
@@ -180,3 +177,4 @@ async def main(request: SonolusRequest, item_name: str):
         leaderboards=[],
         sections=sections,
     )
+    return result

@@ -7,5 +7,13 @@
     "not_found": "Bulunamadı.",
     "show_spoiler_charts": "Spoiler Chartları Göster",
     "invalid_page_singular": "{page} sayfası bulunamadı! {max_page} sayfa var.",
-    "items_not_found": "{item} adlı hiçbir öğe bulunamadı."
+    "items_not_found": "{item} adlı hiçbir öğe bulunamadı.",
+    "other_1v_1d": "1 Diğer Vokal, 1 Diğer Zorluk",
+    "other_nv_1d": "{vocals} Diğer Vokal, 1 Diğer Zorluk",
+    "other_1v_nd": "1 Diğer Vokal, {difficulties} Diğer Zorluk",
+    "other_nv_nd": "{vocals} Diğer Vokal, {difficulties} Diğer Zorluk",
+    "other_1v": "1 Diğer Vokal",
+    "other_nv": "{vocals} Diğer Vokal",
+    "other_1d": "1 Diğer Zorluk",
+    "other_nd": "{difficulties} Diğer Zorluk"
 }

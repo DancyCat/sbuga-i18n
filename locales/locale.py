@@ -48,6 +48,14 @@ class Loc:
     def items_not_found(self, item: str) -> str:
         return self._get("items_not_found").format(item=item)
 
+    @property
+    def spoiler(self) -> str:
+        return self._get("spoiler")
+
+    @property
+    def data_loading(self) -> str:
+        return self._get("data_loading")
+
     def other_section_title(self, vocals: int, difficulties: int) -> str:
         if vocals and difficulties:
             v = "1v" if vocals == 1 else "nv"

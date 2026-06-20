@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import importlib
@@ -38,7 +39,7 @@ async def lifespan(app: SonolusFastAPI):
 
     app.api = SbugaAPI(app.api_config["url"])
 
-    await fetch_music_data(app.api)
+    asyncio.create_task(fetch_music_data(app.api))
 
     yield
 

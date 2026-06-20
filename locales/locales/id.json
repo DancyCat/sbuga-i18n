@@ -15,5 +15,7 @@
     "other_1v": "1 Vokal Lain",
     "other_nv": "{vocals} Vokal Lain",
     "other_1d": "1 Tingkat Kesulitan Lain",
-    "other_nd": "{difficulties} Tingkat Kesulitan Lain"
+    "other_nd": "{difficulties} Tingkat Kesulitan Lain",
+    "spoiler": "Spoiler",
+    "data_loading": "Silakan coba lagi dalam beberapa detik, memperbarui data."
 }

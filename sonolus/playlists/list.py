@@ -1,12 +1,13 @@
 import math
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
 from core import SonolusRequest
 from helpers.data_compilers import compile_engines_list
 from helpers.level_builder import (
     fetch_music_data,
     get_merged_musics,
+    has_music_data,
 )
 from helpers.search import fuzzy_search_playlists
 from helpers.playlist_builder import build_playlist_item
@@ -23,8 +24,14 @@ async def main(
 ):
     api = request.app.api
     source = request.app.base_url
+    locale = request.state.loc
     localization = request.state.localization
     items_per_page = request.app.get_items_per_page("playlists")
+
+    if not has_music_data():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=locale.data_loading
+        )
 
     music_data = await fetch_music_data(api)
     musics = get_merged_musics(

@@ -15,5 +15,7 @@
     "other_1v": "他のボーカル1つ",
     "other_nv": "他のボーカル{vocals}つ",
     "other_1d": "他の難易度1つ",
-    "other_nd": "他の難易度{difficulties}つ"
+    "other_nd": "他の難易度{difficulties}つ",
+    "spoiler": "ネタバレ",
+    "data_loading": "数秒後にもう一度お試しください。データを更新中です。"
 }

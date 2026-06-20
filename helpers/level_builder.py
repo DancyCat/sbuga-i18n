@@ -58,6 +58,10 @@ _update_lock = asyncio.Lock()
 _updating = False
 
 
+def has_music_data() -> bool:
+    return bool(_music_data)
+
+
 async def _do_update():
     global _music_data, _known_version, _updating
     _updating = True
@@ -193,6 +197,8 @@ def get_merged_musics(
                 music.outside_characters = en_music.outside_characters
                 if en_music.artist:
                     music.artist = en_music.artist
+                if en_music.collaboration:
+                    music.collaboration = en_music.collaboration
             else:
                 music.game_characters = {
                     cid: all_game_chars[cid]
@@ -322,6 +328,9 @@ def build_level_description(
 ) -> str:
     lines = []
 
+    if music.collaboration:
+        lines.append(f"#COLLABORATION:#SEPARATOR_COLON:{music.collaboration}")
+        lines.append("")
     if music.artist:
         lines.append(f"#AUTHOR:#SEPARATOR_COLON:{music.artist.name}")
         lines.append("")
@@ -362,6 +371,7 @@ def build_level_item(
     localization: str = "en",
     music_data: dict[str, list[Music]] | None = None,
     levelbg: str = "v3",
+    spoiler_tag: str = "Spoiler",
 ) -> LevelItem:
     level_id = make_level_id(music.id, vocal.id, difficulty_name)
     artist = get_vocal_artist(vocal, music)
@@ -428,6 +438,11 @@ def build_level_item(
             else "プロジェクトセカイ カラフルステージ！ feat. 初音ミク"
         ),
         tags=[
+            *(
+                [Tag(title=spoiler_tag, icon="show")]
+                if music.published_at > int(time.time() * 1000)
+                else []
+            ),
             Tag(title=difficulty_name.capitalize()),
             Tag(title=translate_caption(vocal.caption, localization)),
         ],

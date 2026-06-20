@@ -15,5 +15,7 @@
     "other_1v": "1 Outro Vocal",
     "other_nv": "{vocals} Outros Vocais",
     "other_1d": "1 Outra Dificuldade",
-    "other_nd": "{difficulties} Outras Dificuldades"
+    "other_nd": "{difficulties} Outras Dificuldades",
+    "spoiler": "Spoiler",
+    "data_loading": "Tente novamente em alguns segundos, atualizando dados."
 }

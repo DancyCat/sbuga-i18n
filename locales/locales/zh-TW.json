@@ -15,5 +15,7 @@
     "other_1v": "1個其他聲線",
     "other_nv": "{vocals}個其他聲線",
     "other_1d": "1個其他難度",
-    "other_nd": "{difficulties}個其他難度"
+    "other_nd": "{difficulties}個其他難度",
+    "spoiler": "劇透",
+    "data_loading": "請稍後再試，正在更新資料。"
 }

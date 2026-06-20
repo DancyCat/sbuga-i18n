@@ -12,6 +12,7 @@ from helpers.level_builder import (
     get_other_difficulties,
     get_other_versions,
     get_same_artist_musics,
+    has_music_data,
 )
 from helpers.models.sonolus.item_section import LevelItemSection
 from helpers.models.sonolus.response import ServerItemDetails
@@ -33,6 +34,11 @@ async def main(request: SonolusRequest, item_name: str):
         )
 
     music_id, vocal_id, difficulty_name = parsed
+
+    if not has_music_data():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=locale.data_loading
+        )
 
     music_data = await fetch_music_data(api)
     musics = get_merged_musics(
@@ -83,6 +89,7 @@ async def main(request: SonolusRequest, item_name: str):
         localization=request.state.localization,
         music_data=music_data,
         levelbg=request.state.levelbg,
+        spoiler_tag=locale.spoiler,
     )
 
     description = build_level_description(

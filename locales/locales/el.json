@@ -15,5 +15,7 @@
     "other_1v": "1 Άλλο Vocal",
     "other_nv": "{vocals} Άλλα Vocals",
     "other_1d": "1 Άλλη Δυσκολία",
-    "other_nd": "{difficulties} Άλλες Δυσκολίες"
+    "other_nd": "{difficulties} Άλλες Δυσκολίες",
+    "spoiler": "Spoiler",
+    "data_loading": "Δοκιμάστε ξανά σε λίγα δευτερόλεπτα, ενημέρωση δεδομένων."
 }

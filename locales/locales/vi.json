@@ -15,5 +15,7 @@
     "other_1v": "1 Vocal Khác",
     "other_nv": "{vocals} Vocal Khác",
     "other_1d": "1 Độ Khó Khác",
-    "other_nd": "{difficulties} Độ Khó Khác"
+    "other_nd": "{difficulties} Độ Khó Khác",
+    "spoiler": "Spoiler",
+    "data_loading": "Vui lòng thử lại sau vài giây, đang cập nhật dữ liệu."
 }

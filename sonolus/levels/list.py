@@ -2,7 +2,7 @@ import math
 import random as rand_module
 
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
 from core import SonolusRequest
 from helpers.data_compilers import compile_engines_list
@@ -10,6 +10,7 @@ from helpers.level_builder import (
     fetch_music_data,
     get_merged_musics,
     build_level_item,
+    has_music_data,
 )
 from helpers.search import fuzzy_search, LevelKey
 from helpers.models.sonolus.response import ServerItemList
@@ -35,8 +36,14 @@ async def main(
 
     api = request.app.api
     source = request.app.base_url
+    locale = request.state.loc
     localization = request.state.localization
     items_per_page = request.app.get_items_per_page("levels")
+
+    if not has_music_data():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=locale.data_loading
+        )
 
     music_data = await fetch_music_data(api)
     musics = get_merged_musics(
@@ -155,6 +162,7 @@ async def main(
             localization=localization,
             music_data=music_data,
             levelbg=request.state.levelbg,
+            spoiler_tag=locale.spoiler,
         )
         items.append(level)
 

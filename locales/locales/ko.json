@@ -15,5 +15,7 @@
     "other_1v": "다른 보컬 1개",
     "other_nv": "다른 보컬 {vocals}개",
     "other_1d": "다른 난이도 1개",
-    "other_nd": "다른 난이도 {difficulties}개"
+    "other_nd": "다른 난이도 {difficulties}개",
+    "spoiler": "스포일러",
+    "data_loading": "잠시 후 다시 시도해주세요. 데이터를 업데이트 중입니다."
 }

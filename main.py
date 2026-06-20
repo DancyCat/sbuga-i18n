@@ -61,23 +61,21 @@ if __name__ == "__main__":
     )
     worker.start()
 
-    import urllib.request, json
+    import urllib.request
 
-    for _ in range(60):
+    for _ in range(30):
         try:
             with urllib.request.urlopen(
-                f"http://127.0.0.1:{data_worker_port}/musics"
+                f"http://127.0.0.1:{data_worker_port}/versions"
             ) as resp:
                 if resp.status == 200:
-                    data = json.loads(resp.read())
-                    if data.get("en") or data.get("jp"):
-                        print("[Main] Data worker ready with data.")
-                        break
+                    print("[Main] Data worker is up.")
+                    break
         except Exception:
             pass
-        time.sleep(1)
+        time.sleep(0.5)
     else:
-        print("[Main] WARNING: Data worker has no data yet, continuing anyway.")
+        print("[Main] WARNING: Data worker not responding, continuing anyway.")
 
     import signal
     import atexit

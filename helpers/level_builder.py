@@ -21,6 +21,7 @@ from helpers.models.sonolus.misc import SRL, Tag
 
 _chart_info_cache: dict[int, dict[str, dict]] = {}
 _bundle_hashes: dict[str, dict[str, str]] = {}
+_file_hashes: dict[str, dict[str, str]] = {}
 _music_data: dict[str, list[Music]] = {}
 _last_version_check: float = 0
 _known_version: str = ""
@@ -88,6 +89,11 @@ async def _do_update():
                 return
             new_bundle_hashes = await resp.json()
 
+        async with session.get(f"{DATA_WORKER_URL}/file_hashes") as resp:
+            if resp.status != 200:
+                return
+            new_file_hashes = await resp.json()
+
         if "en" not in raw or "jp" not in raw:
             raise RuntimeError("data worker has no music data yet")
 
@@ -105,6 +111,9 @@ async def _do_update():
 
         _bundle_hashes.clear()
         _bundle_hashes.update(new_bundle_hashes)
+
+        _file_hashes.clear()
+        _file_hashes.update(new_file_hashes)
 
         _music_data = new_music_data
 
@@ -285,21 +294,9 @@ def get_leveldata_url(music_id: int, difficulty: str) -> str:
     return f"{s3_base}/leveldata/{music_id}/{difficulty}.gz"
 
 
-def _srl(
-    url: str, music_id: int, asset_suffix: str, bundle_key: str | None = None
-) -> SRL:
-    import hashlib
-    from sonolus_converters import __version__ as _slc_version
-
-    key = bundle_key or asset_suffix
-    h = _bundle_hashes.get(str(music_id), {}).get(key)
-    if not h:
-        return SRL(url=url)
-    raw = f"{h}-{asset_suffix}"
-    if asset_suffix == "score":
-        raw += f"-score-{_slc_version}"
-    sha1 = hashlib.sha1(raw.encode()).hexdigest()
-    return SRL(hash=sha1, url=url)
+def _srl(url: str, music_id: int, hash_key: str) -> SRL:
+    h = _file_hashes.get(str(music_id), {}).get(hash_key)
+    return SRL(hash=h, url=url) if h else SRL(url=url)
 
 
 def invalidate_chart_cache():
@@ -432,7 +429,7 @@ def build_level_item(
                 tags=[],
                 thumbnail=_srl(cover_url, music.id, "jacket"),
                 data=template_bg.data,
-                image=_srl(bg_image_url, music.id, f"bg{levelbg}", "jacket"),
+                image=_srl(bg_image_url, music.id, f"bg{levelbg}"),
                 configuration=template_bg.configuration,
             ),
         )
@@ -466,9 +463,13 @@ def build_level_item(
         useEffect=UseItem(useDefault=True),
         useParticle=UseItem(useDefault=True),
         cover=_srl(cover_url, music.id, "jacket"),
-        bgm=_srl(bgm_url, music.id, "long", f"long/{vocal.assetbundle_name}"),
-        preview=_srl(preview_url, music.id, "short", f"short/{vocal.assetbundle_name}"),
-        data=_srl(get_leveldata_url(music.id, difficulty_name), music.id, "score"),
+        bgm=_srl(bgm_url, music.id, f"long/{vocal.assetbundle_name}"),
+        preview=_srl(preview_url, music.id, f"short/{vocal.assetbundle_name}"),
+        data=_srl(
+            get_leveldata_url(music.id, difficulty_name),
+            music.id,
+            f"score/{difficulty_name}",
+        ),
     )
 
 

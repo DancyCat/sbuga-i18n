@@ -30,12 +30,17 @@ ADD_CONVERTER_VERSION_SQL = """
 ALTER TABLE chart_data ADD COLUMN IF NOT EXISTS converter_version TEXT NOT NULL DEFAULT ''
 """
 
+ADD_FILE_HASH_SQL = """
+ALTER TABLE chart_data ADD COLUMN IF NOT EXISTS file_hash TEXT NOT NULL DEFAULT ''
+"""
+
 _music_cache: dict[str, list[dict]] = {}
 _search_map_data: dict = {}
 _chart_info: dict[int, dict[str, dict]] = {}
 _bundle_hashes: dict[str, dict[str, str]] = (
     {}
 )  # {music_id_str: {jacket, score, long/{abn}, short/{abn}}}
+_file_hashes: dict[str, dict[str, str]] = {}  # {music_id_str: {suffix: sha1}}
 _versions: dict = {}
 _CHECK_INTERVAL = 300
 _lock = asyncio.Lock()
@@ -142,7 +147,7 @@ async def _load_chart_info_from_db():
         return
     async with _db_pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT music_id, difficulty, combo, duration FROM chart_data"
+            "SELECT music_id, difficulty, combo, duration, file_hash FROM chart_data"
         )
     _chart_info = {}
     for row in rows:
@@ -153,6 +158,12 @@ async def _load_chart_info_from_db():
             "combo": row["combo"],
             "duration": row["duration"],
         }
+        file_hash = row["file_hash"]
+        if file_hash:
+            mid_str = str(mid)
+            _file_hashes.setdefault(mid_str, {})[
+                f"score/{row['difficulty']}"
+            ] = file_hash
     total = sum(len(d) for d in _chart_info.values())
     print(f"[DataWorker] loaded {total} chart infos from db")
 
@@ -433,6 +444,10 @@ async def _check_and_update_charts():
                 thread_pool, _convert_chart, chart_bytes
             )
 
+            import hashlib
+
+            file_hash = hashlib.sha1(ld_bytes).hexdigest()
+
             async with upload_sem:
                 await bucket.upload_fileobj(
                     Fileobj=io.BytesIO(ld_bytes),
@@ -443,10 +458,10 @@ async def _check_and_update_charts():
             async with _db_pool.acquire() as conn:
                 await conn.execute(
                     """
-                    INSERT INTO chart_data (music_id, difficulty, combo, duration, bundle_hash, converter_version)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO chart_data (music_id, difficulty, combo, duration, bundle_hash, converter_version, file_hash)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT (music_id, difficulty) DO UPDATE
-                    SET combo = $3, duration = $4, bundle_hash = $5, converter_version = $6
+                    SET combo = $3, duration = $4, bundle_hash = $5, converter_version = $6, file_hash = $7
                     """,
                     music_id,
                     difficulty,
@@ -454,11 +469,14 @@ async def _check_and_update_charts():
                     duration,
                     bh,
                     converter_version,
+                    file_hash,
                 )
 
             if music_id not in _chart_info:
                 _chart_info[music_id] = {}
             _chart_info[music_id][difficulty] = {"combo": combo, "duration": duration}
+            mid_str = str(music_id)
+            _file_hashes.setdefault(mid_str, {})[f"score/{difficulty}"] = file_hash
 
         except Exception as e:
             print(f"[DataWorker] chart error {music_id}/{difficulty}: {e}")
@@ -493,12 +511,112 @@ async def _check_and_update_charts():
     print(f"[DataWorker] charts done. {total} total")
 
 
+# ---- asset file hashing ----
+
+
+async def _hash_asset_files():
+    if not _music_cache:
+        return
+
+    from helpers.config_loader import get_config
+    import hashlib
+
+    all_regions = get_config()["api"]["region-priority"]
+    supported = {"en", "jp"}
+    regions = [r for r in all_regions if r in supported]
+    merged = _get_merged_multi(_music_cache, regions)
+
+    urls_to_hash: list[tuple[str, str, str]] = []  # (music_id_str, suffix, url)
+    for music in merged:
+        mid_str = str(music.id)
+        existing = _file_hashes.get(mid_str, {})
+        bundle_info = _bundle_hashes.get(mid_str, {})
+
+        # only hash if we have bundle info and haven't hashed yet for this bundle
+        if not bundle_info:
+            continue
+
+        jacket_bh = bundle_info.get("jacket", "")
+        stored_jacket_bh = existing.get("_jacket_bh", "")
+        if jacket_bh and jacket_bh != stored_jacket_bh:
+            if music.jacket_url:
+                urls_to_hash.append((mid_str, "jacket", music.jacket_url))
+            if music.background_v1_url:
+                urls_to_hash.append((mid_str, "bgv1", music.background_v1_url))
+            if music.background_v3_url:
+                urls_to_hash.append((mid_str, "bgv3", music.background_v3_url))
+
+        for vocal in music.vocals:
+            abn = vocal.assetbundle_name
+            long_bh = bundle_info.get(f"long/{abn}", "")
+            stored_long_bh = existing.get(f"_long_bh/{abn}", "")
+            if long_bh and long_bh != stored_long_bh:
+                if vocal.bgm_nosil_url:
+                    urls_to_hash.append((mid_str, f"long/{abn}", vocal.bgm_nosil_url))
+                elif vocal.bgm_url:
+                    urls_to_hash.append((mid_str, f"long/{abn}", vocal.bgm_url))
+
+            short_bh = bundle_info.get(f"short/{abn}", "")
+            stored_short_bh = existing.get(f"_short_bh/{abn}", "")
+            if short_bh and short_bh != stored_short_bh:
+                if vocal.preview_nosil_url:
+                    urls_to_hash.append(
+                        (mid_str, f"short/{abn}", vocal.preview_nosil_url)
+                    )
+                elif vocal.preview_url:
+                    urls_to_hash.append((mid_str, f"short/{abn}", vocal.preview_url))
+
+    if not urls_to_hash:
+        return
+
+    print(f"[DataWorker] hashing {len(urls_to_hash)} asset files...")
+    sem = asyncio.Semaphore(50)
+    hashed = 0
+
+    async def _hash_one(
+        session: aiohttp.ClientSession, mid_str: str, suffix: str, url: str
+    ):
+        nonlocal hashed
+        async with sem:
+            data = await _fetch_bytes(session, url)
+        if data:
+            sha1 = hashlib.sha1(data).hexdigest()
+            _file_hashes.setdefault(mid_str, {})[suffix] = sha1
+        hashed += 1
+
+    BATCH = 100
+    async with aiohttp.ClientSession() as session:
+        for i in range(0, len(urls_to_hash), BATCH):
+            batch = urls_to_hash[i : i + BATCH]
+            await asyncio.gather(*[_hash_one(session, m, s, u) for m, s, u in batch])
+
+    # store bundle hashes as markers so we don't re-hash unchanged files
+    for music in merged:
+        mid_str = str(music.id)
+        bundle_info = _bundle_hashes.get(mid_str, {})
+        fh = _file_hashes.get(mid_str, {})
+        jacket_bh = bundle_info.get("jacket", "")
+        if jacket_bh:
+            fh["_jacket_bh"] = jacket_bh
+        for vocal in music.vocals:
+            abn = vocal.assetbundle_name
+            long_bh = bundle_info.get(f"long/{abn}", "")
+            if long_bh:
+                fh[f"_long_bh/{abn}"] = long_bh
+            short_bh = bundle_info.get(f"short/{abn}", "")
+            if short_bh:
+                fh[f"_short_bh/{abn}"] = short_bh
+
+    print(f"[DataWorker] hashed {hashed} asset files")
+
+
 # ---- main update loop ----
 
 
 async def _update():
     await _check_and_update_music()
     await _check_and_update_charts()
+    await _hash_asset_files()
 
 
 async def _periodic_check():
@@ -530,6 +648,7 @@ async def lifespan(app: FastAPI):
     async with _db_pool.acquire() as conn:
         await conn.execute(CREATE_TABLE_SQL)
         await conn.execute(ADD_CONVERTER_VERSION_SQL)
+        await conn.execute(ADD_FILE_HASH_SQL)
 
     _load_from_disk()
     await _load_chart_info_from_db()
@@ -570,6 +689,11 @@ async def get_chart_info_endpoint():
 @app.get("/bundle_hashes")
 async def get_bundle_hashes():
     return _bundle_hashes
+
+
+@app.get("/file_hashes")
+async def get_file_hashes():
+    return _file_hashes
 
 
 @app.get("/versions")

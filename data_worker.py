@@ -358,8 +358,13 @@ async def _check_and_update_charts():
                     continue
                 music_id = int(m.group(1))
             else:
-                # music/long/0001_01 -> 1
-                music_id = int(parts[2].split("_")[0])
+                # music/long/0001_01 -> 1, music/long/vs_0244_01 -> 244
+                import re
+
+                m = re.search(r"(\d+)_\d+$", parts[2])
+                if not m:
+                    continue
+                music_id = int(m.group(1))
         except (ValueError, IndexError):
             continue
         if music_id not in known_music_ids:

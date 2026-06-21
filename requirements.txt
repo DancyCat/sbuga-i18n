@@ -11,3 +11,4 @@ cutlet
 unidic
 asyncpg
 aioboto3
+packaging

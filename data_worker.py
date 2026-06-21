@@ -471,15 +471,18 @@ async def _check_and_update_charts():
         aws_secret_access_key=_s3_config["secret-access-key"],
         region_name=_s3_config["location"],
     )
+    BATCH_SIZE = 50
     async with s3_session.resource("s3", endpoint_url=_s3_config["endpoint"]) as s3:
         bucket = await s3.Bucket(_s3_config["bucket-name"])
         async with aiohttp.ClientSession() as http_session:
-            await asyncio.gather(
-                *[
-                    process_one(http_session, bucket, mid, diff, url, bh)
-                    for mid, diff, url, bh in all_tasks
-                ]
-            )
+            for i in range(0, len(all_tasks), BATCH_SIZE):
+                batch = all_tasks[i : i + BATCH_SIZE]
+                await asyncio.gather(
+                    *[
+                        process_one(http_session, bucket, mid, diff, url, bh)
+                        for mid, diff, url, bh in batch
+                    ]
+                )
 
     thread_pool.shutdown(wait=False)
 
